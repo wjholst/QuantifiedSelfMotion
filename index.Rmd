@@ -2,7 +2,9 @@
 title: "Quantified Self Movement Prediction"
 author: "Bill Holst"
 date: "April 12, 2016"
-output: html_document
+output:
+  html_document:
+    keep_md: true
 ---
 
 ```{r setup, include=FALSE}
@@ -13,53 +15,31 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This project examines a dataset from a group that studies human motion through measurments from accelerometers in fitness devices. 
 
-The goal of this project is to predict the manner in which particpants did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
-```{r cars}
-summary(cars)
-```
+The goal of this project is to predict the manner in which particpants did the exercise. This is the "classe" variable in the training set. 
+
+The instructions state, "You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases."
+
+The site that provided the data offered the following prediction rates:
+
+Detailed Accuracy  
+  
+Correctly Classified Instances	 164662	 99.4144 %  
+Incorrectly Classified Instances	  970	  0.5856 %  
+Root mean squared error	0.0463  	
+Relative absolute error	0.7938 %	
+Relative absolute error	0.7938 %	
+
+Read more about the project and data: http://groupware.les.inf.puc-rio.br/har#ixzz47WrZ8ZhO
 
 ## Posing the Question
 
-uses impute...
-https://github.com/jasoniem9246/Prediction-Assignment-Writeup/blob/master/Prediction%20Assignment%20Writeup.Rmd
+The goal of this project is to answer the question, "Can measured human motion from accelerometers in fitness devices determine the type of activity subjects are actually doing?"
 
-good writeup - https://rpubs.com/Shikin2015/Prediction_Assignment
-
-
-different models - shows out of model error
-
-https://rpubs.com/snowdj/pml
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+We know from the website that the answer is yes, with models they developed predicting at 99.4% accuracy. So a better question is, "Can we develop prediction method equivalent to the groupware.les.inf.puc-rio.br site that uses measured human motion from accelerometers in fitness devices determine the type of activity subjects are actually doing?"
 
 
-testing = adData[-trainIndex,]
 
-adData = data.frame(diagnosis,predictors)
-trainIndex = createDataPartition(diagnosis, p = 0.50)
-training = adData[trainIndex,]
-testing = adData[-trainIndex,]
 
-adData = data.frame(predictors)
-trainIndex = createDataPartition(diagnosis,p=0.5,list=FALSE)
-training = adData[trainIndex,]
-testing = adData[-trainIndex,]
-
-trainingIL <- training[, c(ILpredictor, "diagnosis")]
-testingIL <- testing[, c(ILpredictor, "diagnosis")]
-ModelAll <- train(diagnosis ~ ., data = trainingIL, method = "glm")
-confusionMatrix(testingIL$diagnosis, predict(ModelAll, testingIL))
-
-preProc <- preProcess(training[, ILpredictor], method = "pca", thresh = .8)
-trainPC <- predict(preProc, training[, ILpredictor])
-ModelPCA <- train(trainingIL$diagnosis ~ ., method = "glm", data = trainPC)
-testPC <- predict(preProc, testing[, ILpredictor])
-confusionMatrix(testingIL$diagnosis, predict(ModelPCA, testPC))
 
 ## Data Analysis
 
@@ -69,16 +49,34 @@ This section describes the dataset and explains how the data was obtained, how p
 
 First we need to download and read the data.
 
+```{r}
+
+setwd("~/GitHub/QuantifiedSelfMotion")
+library(caret)
+library(rattle)
+library(rpart)
+library(rpart.plot)
 URLtrain = 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
-training = read.csv (URLtrain, na.strings=c("NA","#DIV/0!",""))
+trainfile = "pml-training.csv"
+if (!file.exists (trainfile)) {
+    download.file(URLtrain,destfile="pml-training.csv")
+}  
+training = read.csv (trainfile,
+                         na.strings=c("NA","#DIV/0!",""))
 
+URLtest = 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+testfile = "pml-testing.csv"
+if (!file.exists ("pml-testing.csv")) {
+    download.file(URLtest,destfile="pml-testing.csv")
+}  
+testing = read.csv(testfile,
+                      na.strings=c("NA","#DIV/0!",""))
 
-
-urltest = 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
-testing = read.csv (urltest,na.strings=c("NA","#DIV/0!",""))
+```
 
 A quick look at the summary shows that many of the variables are sparsely populated, with 19k NA values. We eliminate these.
 
+```{r}
 tnum = NULL
 
 for (i in 1:length(training)) {
@@ -87,23 +85,121 @@ for (i in 1:length(training)) {
   }
 }
 # remove the na columns
-newtraining = training[,c(tnum)]
 
-We can also remove the near zero variance variables.
+newtraining = training[,c(tnum)]
+newtesting = testing[,c(tnum)]
+
+```
+
+We can also remove the near zero variance variables and other unimportant variables. 
+
+```{r}
 
 nz = nearZeroVar(newtraining,saveMetrics = TRUE)
+#remove the near zero columns
 
+head(newtraining[c(1:8)],2)
+
+```
+
+Variables like user_name and timestamps do not add anything to our analysis. Also the num_windows variable is a near zero variance variable. Remove the first 7 columns.
+
+```{r}
+
+trainData = newtraining[,-c(1:7)]
+testData= newtesting[,-c(1:7)]
+
+# split our training data into a training and test set.
+
+set.seed(4151) 
+inTraining = createDataPartition(trainData$classe, p = 0.6, list = FALSE)
+
+training = trainData[inTraining,]
+validation = trainData[-inTraining,]
+
+```
 
 ### Predictors, Parameters, and Algorithms
 
-Because the intended 
+Because the intended predition is Classe, a factor, a linear regression is not appropriate. Let as look at several other approaches.
+
+First try a classification tree approach. It offers the following advantages:
+
+* Results of a decision tree are easy to interpret, both logically and visually; results can easily be presented to deciscion makers
+
+* There is no need to re-scale the data
+
+* Feature selection / variable screen is automatically provided by the algorithm
+
+* Non-linear relationships are handled by the algorithm automatically
+
+
+```{r}
+
+
+
+tree = rpart(classe ~ ., data=training, method="class")
+fancyRpartPlot(tree)
+
+prediction_tree = predict(tree,validation, type = "class")
+confusion_tree = confusionMatrix(validation$classe,prediction_tree)
+
+## look at the tree
+
+confusion_tree
+
+```
+
+The confusion tree suggests an accuracy of 
+```{r}
+confusion_tree$overall[1]
+```
+With this accuracy, there is an out of sample error of around 24%; this probably too high for our intended prediction, based on the website information, which indicates accuracy should be around 99%.
+
+We now investigate other prediction tools, namely random forest and gradient boosting.
+
+```{r cache = TRUE}
+
+
+fitControl = trainControl(method="cv", number=4, allowParallel=T, verbose=T)
+rf = train(classe~.,data=training,method="rf",
+trControl=fitControl, verbose=F)            
+
+prediction_rf = predict(rf, validation)
+confusion_rf = confusionMatrix(validation$classe,prediction_rf)
+confusion_rf
+
+# Try gradient boosting
+
+gbm = train(classe~.,data=training,method="gbm",
+    trControl=fitControl, verbose=F)    
+prediction_gbm = predict(gbm, validation)
+confusion_gbm = confusionMatrix(validation$classe,prediction_gbm)
+
+```
+The gbm model performs well, with accuracy of almost 96%, slightly less than the random forest. 
+
+The model that seems to perform best is random forest, with accuracy of 99% and out of sample error of 1%.
 
 ## Prediction
 
+We now have use our random forest model to predict values for submission to the automated grading system. The submission is 
+
+
+```{r}
+
+testPrediction_rf = predict(rf, testData)
+
+```
+
 ## Summary
+
+This study examines several appropriate models for the prediction of types of human motion from accelerometers in fitness devices. Evaluation of several models show that the random forest serves as the most accurate prediction model. Of course, there is a possibility of overfitting, but random forest trys to reduce this via tuning the number of features used in cross validation. The results obtained in this study are equivalent to those obtatined in the original groupware study.     
 
 ## References
 
-Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6. 
+ * Data Usage: Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6. 
 
-Read more: http://groupware.les.inf.puc-rio.br/har#sbia_paper_section#ixzz46fnQWmUP
+ * Article on decision tree advantages: http://www.simafore.com/blog/bid/62333/4-key-advantages-of-using-decision-trees-for-predictive-analytics
+
+* Read more: http://groupware.les.inf.puc-rio.br/har#sbia_paper_section#ixzz46fnQWmUP
