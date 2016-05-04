@@ -45,7 +45,7 @@ We know from the website that the answer is yes, with models they developed pred
 
 This section describes the dataset and explains how the data was obtained, how predictors are established, how parameters are picked, and algorithms evaluated.
 
-### Getting the Data
+### Getting and Cleaning the Data
 
 First we need to download and read the data.
 
@@ -104,12 +104,14 @@ head(newtraining[c(1:8)],2)
 
 Variables like user_name and timestamps do not add anything to our analysis. Also the num_windows variable is a near zero variance variable. Remove the first 7 columns.
 
+Then we split the training data into two separate datasets, a training dataset used to build models, and a validation dataset to test accuracy and out of sample error. The normal split for a mid-sized dataset is .6 training, .4 validation.
+
 ```{r}
 
 trainData = newtraining[,-c(1:7)]
 testData= newtesting[,-c(1:7)]
 
-# split our training data into a training and test set.
+# split our training data into a training and validation set.
 
 set.seed(4151) 
 inTraining = createDataPartition(trainData$classe, p = 0.6, list = FALSE)
@@ -191,6 +193,8 @@ We now have use our random forest model to predict values for submission to the 
 testPrediction_rf = predict(rf, testData)
 
 ```
+
+Per the Coursera Honor Code, the results of this prediction are not published here, but have been submitted to the automated prediction quiz grading process. FYI, the test prediction was 20/20. 
 
 ## Summary
 
